@@ -3,15 +3,62 @@
 #include <sys/wait.h>
 #include <stdlib.h>
 
-#define __COMMAND_LENGTH 200
-#define __COMMAND_PADDING 20
-
 /*  TODO!  Handle malloc errors
  *         Implement cd
  *         Implement tab
  *         Implement up arrow
  *         Implement $PATH
  * */
+
+#define __COMMAND_LENGTH 200
+#define __COMMAND_PADDING 20
+
+struct user {
+  char *username;
+  char *pwd;
+  char *ps1;
+};
+static struct user kuser;
+
+struct command {
+  char **argv;
+  char *path;
+};
+
+void ps1() {
+  for(size_t iter = 0; kuser.ps1[iter]; iter++) {
+    if(kuser.ps1[iter] == '\\' && kuser.ps1[iter+1] != '\0') {
+      switch(kuser.ps1[iter+1]) {
+        case 'u':
+          write(1, kuser.username, strlen(kuser.username));
+          iter++;
+          break;
+        case 'W':
+          write(1, kuser.pwd, strlen(kuser.pwd));
+          iter++;
+          break;
+        default:
+          write(1, kuser.ps1 + iter + 1, 1);
+      }
+    } 
+  }
+}
+
+struct user init_user(char **environ) {
+  size_t iter = 0;
+  for(;environ[iter];iter++) {
+    if(strncmp("USER=", environ[iter], 5) == 0) {
+      kuser.username = (char*)malloc(sizeof(char)*strlen(environ[iter]));
+      strcpy(kuser.username, environ[iter]+5);
+    } else if(strncmp("PS1=", environ[iter], 4) == 0) {
+      kuser.ps1 = (char*)malloc(sizeof(char)*strlen(environ[iter]));
+      strcpy(kuser.ps1, environ[iter]+4);
+    } else if(strncmp("PWD=", environ[iter], 4) == 0) {
+      kuser.pwd = (char*)malloc(sizeof(char)*strlen(environ[iter]));
+      strcpy(kuser.pwd, environ[iter]+4);
+    }
+  }
+}
 
 char **argv_gen(char *const command) {
   size_t len = strlen(command);
@@ -47,10 +94,7 @@ size_t npipes(char *const command) {
   return count + 1;
 }
 
-struct command {
-  char **argv;
-  char *path;
-};
+
 
 struct command * new_command_list(char *const command) {
   size_t nopipes = npipes(command) + 1;
@@ -129,7 +173,10 @@ void ksystem(char *const command, char **environ) {
 }
 
 int shell(char **environ) {
+  init_user(environ);
+
   char *command = (char*)malloc(sizeof(char)*(__COMMAND_LENGTH));
+  ps1();
   while(strcmp(command, "exit")) {
     size_t bytes_read = 0;
     while((bytes_read = read(1, command + bytes_read, 1) + bytes_read) > 0) {
@@ -141,6 +188,7 @@ int shell(char **environ) {
     if(bytes_read > (__COMMAND_LENGTH)-1) return 1;
     //write(1, command, strlen(command));
     ksystem(command, environ);
+    ps1();
   }
 }
 
