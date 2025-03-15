@@ -151,7 +151,9 @@ void psystem(char *const command, char **environ) {
   if(pid == 0) {
     if(in != 0) dup2(in, 0);
     execve(commands[iter].path, commands[iter].argv, environ);
+    exit(0);
   }
+  wait(NULL);
 }
 
 void ksystem(char *const command, char **environ) {
