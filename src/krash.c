@@ -2,6 +2,8 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <stdlib.h>
+#include <time.h>
+#include <stdio.h> /*sprintf(..)*/
 
 /*  TODO!  Handle malloc errors
  *         Implement cd
@@ -37,10 +39,26 @@ void ps1() {
           write(1, kuser.pwd, strlen(kuser.pwd));
           iter++;
           break;
+        case 'H':
+          write(1, "@", 1);
+          iter++;
+          break;
+        case 't':
+          time_t now = time(NULL);
+          struct tm *tm_struct = localtime(&now);
+          char stime[20];
+          sprintf(stime, "%d:%d:%d", tm_struct->tm_hour, tm_struct->tm_min, tm_struct->tm_sec);
+          write(1, stime, strlen(stime));
+          iter++;
+          break;
         default:
           write(1, kuser.ps1 + iter + 1, 1);
+          iter++;
+          break;
       }
-    } 
+    } else {
+      write(1, kuser.ps1 + iter, 1);
+    }
   }
 }
 
@@ -170,6 +188,7 @@ void ksystem(char *const command, char **environ) {
     } else {
       psystem(command, environ);
     }
+    exit(0);
   }
   wait(NULL);
 }
@@ -178,8 +197,8 @@ int shell(char **environ) {
   init_user(environ);
 
   char *command = (char*)malloc(sizeof(char)*(__COMMAND_LENGTH));
-  ps1();
   while(strcmp(command, "exit")) {
+    ps1();
     size_t bytes_read = 0;
     while((bytes_read = read(1, command + bytes_read, 1) + bytes_read) > 0) {
       if(*(command + bytes_read - 1) == '\n') {
@@ -188,9 +207,7 @@ int shell(char **environ) {
       }
     }
     if(bytes_read > (__COMMAND_LENGTH)-1) return 1;
-    //write(1, command, strlen(command));
     ksystem(command, environ);
-    ps1();
   }
 }
 
