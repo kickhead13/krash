@@ -1,0 +1,12 @@
+#!/usr/bin/krash 
+
+ls -la | grep d 
+
+$krash (
+if (let value = ls -la | grep d) {
+  echo "files containing 'd' found {value}"
+}
+for(let value in ls -la | grep d) {
+  echo "{value}"
+}
+);

@@ -10,9 +10,10 @@
  *         Implement tab
  *         Implement up arrow
  *         Implement $PATH
+ *         Implement list of PID's
  * */
 
-#define __COMMAND_LENGTH 200
+#define __COMMAND_LENGTH 50
 #define __COMMAND_PADDING 20
 
 struct user {
@@ -25,6 +26,7 @@ static struct user kuser;
 struct command {
   char **argv;
   char *path;
+  char *fcmd;
 };
 
 void ps1() {
@@ -97,36 +99,33 @@ char **argv_gen(char *const command) {
   return ret;
 }
 
-int check_pipe(char *const command) {
-  size_t len = strlen(command);
-  for(size_t iter = 0; iter < len; iter++) 
-    if(command[iter] == '|') return 1;
-  return 0;
-}
 
-size_t npipes(char *const command) {
+
+size_t scounter(char *const restrict command, char const symbol) {
   size_t len = strlen(command);
   size_t count = 0;
   for(size_t iter = 0; iter < len; iter++) 
-    if(command[iter] == '|') count++;
+    if(command[iter] == symbol) count++;
   return count + 1;
 }
 
 
 
-struct command * new_command_list(char *const command) {
-  size_t nopipes = npipes(command) + 1;
-  char **cmds = (char**)malloc(sizeof(char*)*nopipes);
-  struct command * commands = (struct command*)malloc(sizeof(struct command) * (nopipes));
-  char * cmd = strtok(command, "|");
+struct command * new_command_list(char *const command, char *const restrict sep, char const symbol) {
+  size_t nocommands = scounter(command, symbol) + 1;
+  char **cmds = (char**)malloc(sizeof(char*)*nocommands);
+  struct command * commands = (struct command*)malloc(sizeof(struct command) * (nocommands));
+  char * cmd = strtok(command, sep);
   size_t iter = 0;
   while(cmd) {
     cmds[iter] = (char*)malloc(sizeof(char)*(strlen(cmd)+1));
     strcpy(cmds[iter], cmd);
-    cmd = strtok(NULL, "|");
+    cmd = strtok(NULL, sep);
     iter++;
   }
-  for(iter = 0; iter < nopipes - 1; iter++) {
+  for(iter = 0; iter < nocommands - 1 && cmds[iter]; iter++) {
+    commands[iter].fcmd = (char*)malloc(sizeof(char) * (strlen(cmds[iter]) + (__COMMAND_PADDING) ));
+    strcpy(commands[iter].fcmd, cmds[iter]);
     commands[iter].argv = argv_gen(cmds[iter]);
     commands[iter].path = (char*)malloc(sizeof(char)*(strlen(commands[iter].argv[0]+ (__COMMAND_PADDING))));
     strcat(commands[iter].path, "/usr/bin/");
@@ -153,7 +152,7 @@ int child(int in, int out, struct command cmd, char **environ) {
 }
 
 void psystem(char *const command, char **environ) {
-  struct command *commands = new_command_list(command);
+  struct command *commands = new_command_list(command, "|", '|');
   size_t iter = 0;
   int fd[2], in=0;
 
@@ -177,13 +176,14 @@ void psystem(char *const command, char **environ) {
 void ksystem(char *const command, char **environ) {
   pid_t pid = fork();
   if(pid == 0) {
-    if(!check_pipe(command)) { 
+    if(scounter(command, '|') <= 1) { 
       char **argv = argv_gen(command);
       char *path = (char*)malloc(sizeof(char) * (strlen(argv[0]) +(__COMMAND_PADDING)));
       strcat(path, "/usr/bin/");
       strcat(path, argv[0]);
       if(pid == 0) {
         execve(path, argv, environ);
+        exit(0);
       }
     } else {
       psystem(command, environ);
@@ -193,10 +193,21 @@ void ksystem(char *const command, char **environ) {
   wait(NULL);
 }
 
+void ssystem(char *const command, char **environ) {
+  if(scounter(command, ';') > 1) {
+    struct command * commands = new_command_list(command, ";", ';');
+    size_t iter = 0;
+    while(commands[iter].path) {
+      if(commands[iter].fcmd) ksystem(commands[iter].fcmd, environ);
+      iter++;
+    }
+  }
+  ksystem(command, environ);
+}
+
 int shell(char **environ) {
   init_user(environ);
-
-  char *command = (char*)malloc(sizeof(char)*(__COMMAND_LENGTH));
+  char command[__COMMAND_LENGTH];// = (char*)malloc(sizeof(char)*(__COMMAND_LENGTH));
   while(strcmp(command, "exit")) {
     ps1();
     size_t bytes_read = 0;
@@ -207,7 +218,9 @@ int shell(char **environ) {
       }
     }
     if(bytes_read > (__COMMAND_LENGTH)-1) return 1;
-    ksystem(command, environ);
+    if(bytes_read > 0) {
+      ssystem(command, environ);
+    }
   }
 }
 

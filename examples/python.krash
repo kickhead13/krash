@@ -1,0 +1,5 @@
+#!/usr/bin/krash 
+
+$python(
+print("hello from python")
+);
